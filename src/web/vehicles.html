@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Vehicles - RentRide</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="page">
+    <div class="page-head" id="head"></div>
+
+    <div class="stats">
+        <div class="stat"><div class="num" id="sTotal">0</div><div class="lbl">Total vehicles</div></div>
+        <div class="stat green"><div class="num" id="sFree">0</div><div class="lbl">Available</div></div>
+        <div class="stat red"><div class="num" id="sRented">0</div><div class="lbl">Rented out</div></div>
+    </div>
+
+    <div class="grid">
+        <div class="card">
+            <h2>Add a vehicle</h2>
+            <form id="vForm" data-reset="updateExtra">
+                <label>Type
+                    <select name="type" id="type">
+                        <option>Car</option><option>Bike</option><option>Truck</option>
+                    </select>
+                </label>
+                <div class="row">
+                    <label>Vehicle ID <input name="id" placeholder="V101" autocomplete="off"></label>
+                    <label>Brand <input name="brand" placeholder="Toyota" autocomplete="off"></label>
+                </div>
+                <div class="row">
+                    <label>Rate per day (₹) <input name="rate" type="number" min="1" step="any" placeholder="1500"></label>
+                    <label><span id="extraLabel">Seats</span> <input name="extra" type="number" min="1" step="any" placeholder="5"></label>
+                </div>
+                <button type="submit">Add Vehicle</button>
+                <p class="hint">Car: rate × days · Bike: 10% off for 7+ days · Truck: rate × days + ₹500 loading fee</p>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>All vehicles</h2>
+            <div class="toolbar">
+                <input id="search" placeholder="Search by ID or brand...">
+                <div class="chips" id="chips">
+                    <button type="button" class="chip on" data-t="All">All</button>
+                    <button type="button" class="chip" data-t="Car">Cars</button>
+                    <button type="button" class="chip" data-t="Bike">Bikes</button>
+                    <button type="button" class="chip" data-t="Truck">Trucks</button>
+                </div>
+            </div>
+            <div class="table-wrap"><table id="table"></table></div>
+        </div>
+    </div>
+</div>
+
+<script src="common.js"></script>
+<script>
+    renderShell('Vehicles', 'Vehicles', 'Add cars, bikes and trucks to your fleet and see what is available.');
+
+    let all = [], filter = 'All';
+    const labels = {Car: ['Seats', '5'], Bike: ['Engine (cc)', '150'], Truck: ['Capacity (tons)', '5']};
+
+    function updateExtra() {
+        const [label, ph] = labels[document.getElementById('type').value];
+        document.getElementById('extraLabel').textContent = label;
+        document.querySelector('[name=extra]').placeholder = ph;
+    }
+
+    function draw() {
+        const s = document.getElementById('search').value.toLowerCase();
+        const rows = all.filter(v => (filter === 'All' || v.type === filter)
+            && (v.id + ' ' + v.brand).toLowerCase().includes(s));
+        fillTable('table', ['ID', 'Type', 'Brand', 'Details', 'Rate / day', 'Status'],
+            rows.map(v => [`<b>${esc(v.id)}</b>`, typeBadge(v.type), esc(v.brand), v.details, money(v.rate),
+                v.available ? '<span class="badge green">Available</span>' : '<span class="badge red">Rented</span>']),
+            all.length ? 'No vehicles match your search.' : 'No vehicles yet. Add your first one on the left.');
+        document.getElementById('sTotal').textContent = all.length;
+        document.getElementById('sFree').textContent = all.filter(v => v.available).length;
+        document.getElementById('sRented').textContent = all.filter(v => !v.available).length;
+    }
+
+    async function load() { all = await getJson('/api/vehicles'); draw(); }
+
+    document.getElementById('type').addEventListener('change', updateExtra);
+    document.getElementById('search').addEventListener('input', draw);
+    document.getElementById('chips').addEventListener('click', e => {
+        if (!e.target.dataset.t) return;
+        filter = e.target.dataset.t;
+        document.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c === e.target));
+        draw();
+    });
+    submitForm('vForm', '/api/vehicles', 'Vehicle added', load);
+    load();
+</script>
+</body>
+</html>

@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Rentals - RentRide</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="page">
+    <div class="page-head" id="head"></div>
+
+    <div class="stats">
+        <div class="stat"><div class="num" id="sTotal">0</div><div class="lbl">Total rentals</div></div>
+        <div class="stat amber"><div class="num" id="sActive">0</div><div class="lbl">Active now</div></div>
+        <div class="stat green"><div class="num" id="sRevenue">₹0</div><div class="lbl">Total rent value</div></div>
+    </div>
+
+    <div class="grid">
+        <div class="card">
+            <h2>New rental</h2>
+            <form id="rForm" data-reset="updateQuote">
+                <label>Vehicle
+                    <select name="vehicleId" id="vehicle"></select>
+                </label>
+                <label>Customer
+                    <select name="customerId" id="customer"></select>
+                </label>
+                <label>Number of days <input name="days" id="days" type="number" min="1" placeholder="3"></label>
+                <div class="quote" id="quote">Choose a vehicle and days to see the rent.</div>
+                <button type="submit">Rent Vehicle</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>Rental records</h2>
+            <div class="toolbar">
+                <input id="search" placeholder="Search by customer or vehicle...">
+                <div class="chips" id="chips">
+                    <button type="button" class="chip on" data-t="All">All</button>
+                    <button type="button" class="chip" data-t="Active">Active</button>
+                    <button type="button" class="chip" data-t="Returned">Returned</button>
+                </div>
+            </div>
+            <div class="table-wrap"><table id="table"></table></div>
+        </div>
+    </div>
+</div>
+
+<script src="common.js"></script>
+<script>
+    renderShell('Rentals', 'Rentals', 'Rent out a vehicle, see the total instantly, and take it back when it returns.');
+
+    let rentals = [], filter = 'All';
+
+    function draw() {
+        const s = document.getElementById('search').value.toLowerCase();
+        const rows = rentals.filter(r =>
+            (filter === 'All' || (filter === 'Active') === !r.returned)
+            && (r.customer + ' ' + r.vehicle).toLowerCase().includes(s)).reverse();
+        fillTable('table', ['#', 'Customer', 'Vehicle', 'Date', 'Days', 'Total', 'Status'],
+            rows.map(r => [r.id, `<b>${esc(r.customer)}</b>`, esc(r.vehicle), r.date, r.days, money(r.total),
+                r.returned ? '<span class="badge green">Returned</span>'
+                    : `<button class="small" onclick="giveBack(${r.id})">Return</button>`]),
+            rentals.length ? 'No rentals match.' : 'No rentals yet. Create one on the left.');
+        document.getElementById('sTotal').textContent = rentals.length;
+        document.getElementById('sActive').textContent = rentals.filter(r => !r.returned).length;
+        document.getElementById('sRevenue').textContent = money(rentals.reduce((a, r) => a + r.total, 0));
+    }
+
+    async function load() {
+        const [vehicles, customers] = await Promise.all([getJson('/api/vehicles'), getJson('/api/customers')]);
+        rentals = await getJson('/api/rentals');
+
+        const vSel = document.getElementById('vehicle'), cSel = document.getElementById('customer');
+        const vPrev = vSel.value, cPrev = cSel.value;
+        const free = vehicles.filter(v => v.available);
+        vSel.innerHTML = free.length
+            ? free.map(v => `<option value="${esc(v.id)}">${esc(v.id)} · ${v.type} · ${esc(v.brand)} (${money(v.rate)}/day)</option>`).join('')
+            : '<option value="">No vehicles available</option>';
+        cSel.innerHTML = customers.length
+            ? customers.map(c => `<option value="${esc(c.id)}">${esc(c.id)} · ${esc(c.name)}</option>`).join('')
+            : '<option value="">No customers yet</option>';
+        if (free.some(v => v.id === vPrev)) vSel.value = vPrev;
+        if (customers.some(c => c.id === cPrev)) cSel.value = cPrev;
+
+        updateQuote();
+        draw();
+    }
+
+    async function updateQuote() {
+        const box = document.getElementById('quote');
+        const v = document.getElementById('vehicle').value, d = document.getElementById('days').value;
+        if (!v || !d || d < 1) { box.innerHTML = 'Choose a vehicle and days to see the rent.'; return; }
+        const json = await postData('/api/quote', {vehicleId: v, days: d}, true);
+        if (json) box.innerHTML = `Estimated rent: <b>${money(json.total)}</b>`;
+    }
+
+    async function giveBack(id) {
+        const json = await postData('/api/return', {rentalId: id});
+        if (json) { toast(json.message); load(); }
+    }
+
+    document.getElementById('vehicle').addEventListener('change', updateQuote);
+    document.getElementById('days').addEventListener('input', updateQuote);
+    document.getElementById('search').addEventListener('input', draw);
+    document.getElementById('chips').addEventListener('click', e => {
+        if (!e.target.dataset.t) return;
+        filter = e.target.dataset.t;
+        document.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c === e.target));
+        draw();
+    });
+    submitForm('rForm', '/api/rent', 'Rental created', load);
+    load();
+</script>
+</body>
+</html>

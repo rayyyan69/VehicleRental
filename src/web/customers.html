@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Customers - RentRide</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="page">
+    <div class="page-head" id="head"></div>
+
+    <div class="stats">
+        <div class="stat"><div class="num" id="sTotal">0</div><div class="lbl">Total customers</div></div>
+        <div class="stat amber"><div class="num" id="sActive">0</div><div class="lbl">With active rental</div></div>
+        <div class="stat green"><div class="num" id="sRentals">0</div><div class="lbl">Rentals so far</div></div>
+    </div>
+
+    <div class="grid">
+        <div class="card">
+            <h2>Add a customer</h2>
+            <form id="cForm">
+                <label>Customer ID <input name="id" placeholder="C1" autocomplete="off"></label>
+                <label>Full name <input name="name" placeholder="Aisha Khan" autocomplete="off"></label>
+                <label>Phone <input name="phone" placeholder="98765 43210" autocomplete="off"></label>
+                <button type="submit">Add Customer</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>All customers</h2>
+            <div class="toolbar"><input id="search" placeholder="Search by ID, name or phone..."></div>
+            <div class="table-wrap"><table id="table"></table></div>
+        </div>
+    </div>
+</div>
+
+<script src="common.js"></script>
+<script>
+    renderShell('Customers', 'Customers', 'Register the people who rent your vehicles.');
+
+    let customers = [], rentals = [];
+
+    function draw() {
+        const s = document.getElementById('search').value.toLowerCase();
+        const rows = customers.filter(c => (c.id + c.name + c.phone).toLowerCase().includes(s));
+        fillTable('table', ['Customer', 'ID', 'Phone', 'Rentals', 'Status'],
+            rows.map(c => {
+                const mine = rentals.filter(r => r.customerId === c.id);
+                const active = mine.filter(r => !r.returned).length;
+                return [`<span class="avatar">${esc(c.name[0].toUpperCase())}</span><b>${esc(c.name)}</b>`,
+                    esc(c.id), esc(c.phone), mine.length,
+                    active ? `<span class="badge amber">${active} active</span>` : '<span class="badge gray">None</span>'];
+            }),
+            customers.length ? 'No customers match your search.' : 'No customers yet. Add your first one on the left.');
+        document.getElementById('sTotal').textContent = customers.length;
+        document.getElementById('sActive').textContent =
+            new Set(rentals.filter(r => !r.returned).map(r => r.customerId)).size;
+        document.getElementById('sRentals').textContent = rentals.length;
+    }
+
+    async function load() {
+        [customers, rentals] = await Promise.all([getJson('/api/customers'), getJson('/api/rentals')]);
+        draw();
+    }
+
+    document.getElementById('search').addEventListener('input', draw);
+    submitForm('cForm', '/api/customers', 'Customer added', load);
+    load();
+</script>
+</body>
+</html>
